@@ -5,11 +5,14 @@ A comprehensive Model Context Protocol (MCP) server that provides complete Googl
 ## 🚀 Features
 
 ### Core Capabilities
-- ✅ **Full CRUD Operations**: Create, read, update, and delete files and folders
+- ✅ **Full CRUD Operations**: Create, read, update, delete, move, and copy files and folders
 - ✅ **Rich Text Formatting**: Native Google Docs with markdown and HTML support
 - ✅ **Google Workspace Integration**: Native support for Docs, Sheets, and other formats
 - ✅ **Smart Format Detection**: Auto-detects content format (markdown, HTML, plain text)
-- ✅ **Advanced Search**: Powerful full-text search across your entire Drive
+- ✅ **Advanced Search**: Multi-filter search by type, date, owner, location, and content
+- ✅ **File Organization**: Move, copy, rename files with folder management
+- ✅ **Hierarchical Navigation**: Visual folder tree exploration with configurable depth
+- ✅ **Safe Deletion**: Trash/permanent delete options with recovery capabilities
 - ✅ **Authentication Management**: Built-in OAuth refresh and permission management
 
 ### Tools
@@ -62,6 +65,58 @@ Rename any file or folder.
 }
 ```
 
+##### `gdrive_list_folder_contents`
+List all files and folders within a specific folder with organized display.
+```json
+{
+  "folder_id": "string (folder ID, use 'root' for root folder)",
+  "include_trashed": "boolean (optional, defaults to false)"
+}
+```
+
+##### `gdrive_move_file`
+Move any file or folder to a different location in your Drive.
+```json
+{
+  "file_id": "string (file ID to move)",
+  "new_parent_id": "string (destination folder ID, use 'root' for root)"
+}
+```
+
+##### `gdrive_copy_file`
+Create a copy of any file with optional renaming and location change.
+```json
+{
+  "file_id": "string (file ID to copy)",
+  "new_name": "string (optional new name for copy)",
+  "parent_folder_id": "string (optional destination folder)"
+}
+```
+
+##### `gdrive_delete_file`
+Delete files and folders with trash/permanent options.
+```json
+{
+  "file_id": "string (file ID to delete)",
+  "permanent": "boolean (optional, true for permanent delete, false for trash)"
+}
+```
+
+##### `gdrive_advanced_search`
+Powerful search with multiple filters for precise file discovery.
+```json
+{
+  "query": "string (optional text search)",
+  "file_type": "string (optional: document, spreadsheet, presentation, folder, image, pdf, text)",
+  "modified_after": "string (optional YYYY-MM-DD date)",
+  "modified_before": "string (optional YYYY-MM-DD date)",
+  "owner": "string (optional owner email)",
+  "folder_id": "string (optional folder to search within)",
+  "include_trashed": "boolean (optional, defaults to false)",
+  "max_results": "number (optional, defaults to 50, max 100)"
+}
+```
+
 #### 📝 **Google Docs Management**
 
 ##### `gdrive_create_document`
@@ -93,6 +148,16 @@ Create new folders and organize your Drive.
 {
   "name": "string (folder name)",
   "parentFolderId": "string (optional parent folder ID)"
+}
+```
+
+##### `gdrive_get_folder_tree`
+Get hierarchical folder structure with visual tree display.
+```json
+{
+  "root_folder_id": "string (starting folder ID, use 'root' for entire Drive)",
+  "max_depth": "number (optional, defaults to 3, max 10)",
+  "include_files": "boolean (optional, defaults to false for folders only)"
 }
 ```
 
@@ -335,7 +400,7 @@ This document outlines our **exciting new project** with the following goals:
 });
 ```
 
-### Content Updates
+### File Organization & Management
 ```typescript
 // Update a Google Doc with new formatted content
 await gdrive_update_document({
@@ -343,9 +408,53 @@ await gdrive_update_document({
   content: "# Updated Title\n\nNew **bold** content with *formatting*!"
 });
 
-// Organize files
+// Organize files and folders
 await gdrive_create_folder({ name: "2024 Projects" });
+await gdrive_move_file({ file_id: "file-id", new_parent_id: "folder-id" });
+await gdrive_copy_file({ file_id: "template-id", new_name: "New Project Copy" });
 await gdrive_rename_file({ file_id: "old-file-id", new_name: "New Name.docx" });
+
+// List folder contents with organization
+const contents = await gdrive_list_folder_contents({ 
+  folder_id: "folder-id",
+  include_trashed: false 
+});
+
+// Get visual folder tree structure
+const tree = await gdrive_get_folder_tree({
+  root_folder_id: "root",
+  max_depth: 4,
+  include_files: true
+});
+```
+
+### Advanced Search & Discovery
+```typescript
+// Multi-filter advanced search
+const searchResults = await gdrive_advanced_search({
+  query: "quarterly report",
+  file_type: "document",
+  modified_after: "2024-01-01",
+  owner: "colleague@company.com",
+  folder_id: "reports-folder-id",
+  max_results: 25
+});
+
+// Search by file type and date range
+const recentImages = await gdrive_advanced_search({
+  file_type: "image",
+  modified_after: "2024-08-01",
+  folder_id: "photos-folder"
+});
+```
+
+### File Cleanup & Maintenance
+```typescript
+// Safe deletion (moves to trash)
+await gdrive_delete_file({ file_id: "unwanted-file-id" });
+
+// Permanent deletion (cannot be recovered)
+await gdrive_delete_file({ file_id: "file-id", permanent: true });
 ```
 
 ### Authentication Management
@@ -407,6 +516,14 @@ If you get "Insufficient Permission" errors:
 
 ## 🚀 What's New
 
+### v2.1 Features (Latest)
+- ✅ **Advanced File Organization**: Move, copy, rename, and delete files with safety options
+- ✅ **Folder Navigation**: List folder contents and hierarchical tree visualization  
+- ✅ **Multi-Filter Search**: Advanced search by type, date, owner, location, and content
+- ✅ **Visual Folder Trees**: Hierarchical structure display with configurable depth
+- ✅ **Batch Operations**: Efficient bulk file management capabilities
+- ✅ **Safe Deletion**: Trash/permanent delete options with recovery support
+
 ### v2.0 Features
 - ✅ **Full CRUD Operations**: Complete create, read, update, delete functionality
 - ✅ **Rich Google Docs Support**: Native formatting with markdown and HTML
@@ -416,8 +533,15 @@ If you get "Insufficient Permission" errors:
 - ✅ **Built-in Auth Refresh**: Update permissions without leaving your AI tool
 - ✅ **Enhanced Error Handling**: Better error messages and troubleshooting
 
-### Upgrade from v1.0
-If you're upgrading from the read-only version:
+### Complete Tool Set (15 Tools)
+**File Management:** search, read, create, update, rename, move, copy, delete, list contents
+**Google Docs:** create documents, update documents with rich formatting  
+**Folders:** create folders, get folder tree structure
+**Search:** basic search, advanced multi-filter search
+**Admin:** refresh authentication
+
+### Upgrade from Earlier Versions
+If you're upgrading from v1.0 or v2.0:
 1. Update OAuth scopes in Google Cloud Console (add full Drive + Docs API access)
 2. Re-authenticate: `node dist/index.js auth` or use `gdrive_refresh_auth()`
-3. Enjoy full read-write capabilities with rich formatting!
+3. Enjoy comprehensive file management with advanced search and organization!
