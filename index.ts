@@ -567,6 +567,145 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
+        name: "gdrive_list_folder_contents",
+        description: "List all files and folders within a specific folder",
+        inputSchema: {
+          type: "object",
+          properties: {
+            folder_id: {
+              type: "string",
+              description: "ID of the folder to list (use 'root' for root folder)",
+            },
+            include_trashed: {
+              type: "boolean",
+              description: "Include trashed files (defaults to false)",
+            },
+          },
+          required: ["folder_id"],
+        },
+      },
+      {
+        name: "gdrive_move_file",
+        description: "Move a file or folder to a different location",
+        inputSchema: {
+          type: "object",
+          properties: {
+            file_id: {
+              type: "string",
+              description: "ID of the file to move",
+            },
+            new_parent_id: {
+              type: "string",
+              description: "ID of the destination folder (use 'root' for root folder)",
+            },
+          },
+          required: ["file_id", "new_parent_id"],
+        },
+      },
+      {
+        name: "gdrive_copy_file",
+        description: "Create a copy of a file in Google Drive",
+        inputSchema: {
+          type: "object",
+          properties: {
+            file_id: {
+              type: "string",
+              description: "ID of the file to copy",
+            },
+            new_name: {
+              type: "string",
+              description: "Name for the copied file (optional)",
+            },
+            parent_folder_id: {
+              type: "string",
+              description: "ID of folder to copy to (optional, defaults to same location)",
+            },
+          },
+          required: ["file_id"],
+        },
+      },
+      {
+        name: "gdrive_delete_file",
+        description: "Delete a file or folder (moves to trash by default)",
+        inputSchema: {
+          type: "object",
+          properties: {
+            file_id: {
+              type: "string",
+              description: "ID of the file to delete",
+            },
+            permanent: {
+              type: "boolean",
+              description: "Permanently delete (bypass trash, defaults to false)",
+            },
+          },
+          required: ["file_id"],
+        },
+      },
+      {
+        name: "gdrive_advanced_search",
+        description: "Advanced search with filters for file type, date range, owner, and more",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "Text to search for in file names and content (optional)",
+            },
+            file_type: {
+              type: "string",
+              description: "Filter by file type: 'document', 'spreadsheet', 'presentation', 'folder', 'image', 'pdf', 'text', or specific MIME type",
+            },
+            modified_after: {
+              type: "string",
+              description: "Only files modified after this date (YYYY-MM-DD format)",
+            },
+            modified_before: {
+              type: "string",
+              description: "Only files modified before this date (YYYY-MM-DD format)",
+            },
+            owner: {
+              type: "string",
+              description: "Filter by owner email address",
+            },
+            folder_id: {
+              type: "string",
+              description: "Search within a specific folder",
+            },
+            include_trashed: {
+              type: "boolean",
+              description: "Include trashed files (defaults to false)",
+            },
+            max_results: {
+              type: "number",
+              description: "Maximum number of results to return (defaults to 50, max 100)",
+            },
+          },
+        },
+      },
+      {
+        name: "gdrive_get_folder_tree",
+        description: "Get hierarchical folder structure starting from a specific folder",
+        inputSchema: {
+          type: "object",
+          properties: {
+            root_folder_id: {
+              type: "string",
+              description: "Starting folder ID (use 'root' for entire Drive structure)",
+            },
+            max_depth: {
+              type: "number",
+              description: "Maximum depth to traverse (defaults to 3, max 10)",
+            },
+            include_files: {
+              type: "boolean",
+              description: "Include files in the tree (defaults to false, folders only)",
+            },
+          },
+          required: ["root_folder_id"],
+        },
+      },
+      {
         name: "gdrive_refresh_auth",
         description: "Refresh Google Drive authentication to get updated permissions",
         inputSchema: {
@@ -1045,9 +1184,458 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         isError: true,
       };
     }
+  } else if (request.params.name === "gdrive_list_folder_contents") {
+    const { folder_id, include_trashed = false } = request.params.arguments as any;
+    
+    if (!folder_id) {
+      throw new McpError(ErrorCode.InvalidParams, "Folder ID is required");
+    }
+
+    try {
+      const query = include_trashed ? `'${folder_id}' in parents` : `'${folder_id}' in parents and trashed=false`;
+      
+      const res = await drive.files.list({
+        q: query,
+        pageSize: 100,
+        fields: "files(id, name, mimeType, modifiedTime, size, parents)",
+        orderBy: "folder,name",
+      });
+
+      const files = res.data.files || [];
+      const folders = files.filter(file => file.mimeType === 'application/vnd.google-apps.folder');
+      const regularFiles = files.filter(file => file.mimeType !== 'application/vnd.google-apps.folder');
+
+      const formatFileInfo = (file: any) => 
+        `${file.name} (${file.mimeType}) - ID: ${file.id}, Size: ${file.size || 'N/A'}, Modified: ${file.modifiedTime}`;
+
+      let output = `Folder contents (${files.length} items):\n\n`;
+      
+      if (folders.length > 0) {
+        output += `📁 Folders (${folders.length}):\n`;
+        output += folders.map(formatFileInfo).join('\n') + '\n\n';
+      }
+      
+      if (regularFiles.length > 0) {
+        output += `📄 Files (${regularFiles.length}):\n`;
+        output += regularFiles.map(formatFileInfo).join('\n');
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: output,
+          },
+        ],
+        isError: false,
+      };
+    } catch (error: any) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error listing folder contents: ${error.message}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  } else if (request.params.name === "gdrive_move_file") {
+    const { file_id, new_parent_id } = request.params.arguments as any;
+    
+    if (!file_id || !new_parent_id) {
+      throw new McpError(ErrorCode.InvalidParams, "File ID and new parent ID are required");
+    }
+
+    try {
+      // First get current parents
+      const file = await drive.files.get({
+        fileId: file_id,
+        fields: 'parents, name',
+      });
+
+      const previousParents = file.data.parents?.join(',');
+
+      // Move the file
+      const res = await drive.files.update({
+        fileId: file_id,
+        addParents: new_parent_id,
+        removeParents: previousParents,
+        fields: 'id, name, parents',
+      });
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `File moved successfully!\nName: ${res.data.name}\nID: ${res.data.id}\nNew parent: ${new_parent_id}\nPrevious parents: ${previousParents}`,
+          },
+        ],
+        isError: false,
+      };
+    } catch (error: any) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error moving file: ${error.message}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  } else if (request.params.name === "gdrive_copy_file") {
+    const { file_id, new_name, parent_folder_id } = request.params.arguments as any;
+    
+    if (!file_id) {
+      throw new McpError(ErrorCode.InvalidParams, "File ID is required");
+    }
+
+    try {
+      const copyMetadata: any = {};
+      
+      if (new_name) {
+        copyMetadata.name = new_name;
+      }
+      
+      if (parent_folder_id) {
+        copyMetadata.parents = [parent_folder_id];
+      }
+
+      const res = await drive.files.copy({
+        fileId: file_id,
+        requestBody: copyMetadata,
+        fields: 'id, name, mimeType, createdTime, parents',
+      });
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `File copied successfully!\nOriginal ID: ${file_id}\nNew ID: ${res.data.id}\nName: ${res.data.name}\nType: ${res.data.mimeType}\nCreated: ${res.data.createdTime}\nParent: ${res.data.parents?.[0] || 'root'}`,
+          },
+        ],
+        isError: false,
+      };
+    } catch (error: any) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error copying file: ${error.message}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  } else if (request.params.name === "gdrive_delete_file") {
+    const { file_id, permanent = false } = request.params.arguments as any;
+    
+    if (!file_id) {
+      throw new McpError(ErrorCode.InvalidParams, "File ID is required");
+    }
+
+    try {
+      if (permanent) {
+        // Permanently delete
+        await drive.files.delete({
+          fileId: file_id,
+        });
+        
+        return {
+          content: [
+            {
+              type: "text",
+              text: `File permanently deleted!\nID: ${file_id}`,
+            },
+          ],
+          isError: false,
+        };
+      } else {
+        // Move to trash
+        const res = await drive.files.update({
+          fileId: file_id,
+          requestBody: {
+            trashed: true,
+          },
+          fields: 'id, name, trashed',
+        });
+        
+        return {
+          content: [
+            {
+              type: "text",
+              text: `File moved to trash!\nName: ${res.data.name}\nID: ${res.data.id}\nTrashed: ${res.data.trashed}`,
+            },
+          ],
+          isError: false,
+        };
+      }
+    } catch (error: any) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error deleting file: ${error.message}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  } else if (request.params.name === "gdrive_advanced_search") {
+    const { 
+      query, 
+      file_type, 
+      modified_after, 
+      modified_before, 
+      owner, 
+      folder_id, 
+      include_trashed = false,
+      max_results = 50 
+    } = request.params.arguments as any;
+
+    try {
+      // Build the search query
+      const queryParts: string[] = [];
+
+      // Text search
+      if (query) {
+        const escapedQuery = query.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+        queryParts.push(`fullText contains '${escapedQuery}' or name contains '${escapedQuery}'`);
+      }
+
+      // File type filter
+      if (file_type) {
+        const mimeTypeMap: { [key: string]: string } = {
+          'document': 'application/vnd.google-apps.document',
+          'spreadsheet': 'application/vnd.google-apps.spreadsheet', 
+          'presentation': 'application/vnd.google-apps.presentation',
+          'folder': 'application/vnd.google-apps.folder',
+          'pdf': 'application/pdf',
+          'image': 'image/',
+          'text': 'text/',
+        };
+
+        if (mimeTypeMap[file_type]) {
+          if (file_type === 'image' || file_type === 'text') {
+            queryParts.push(`mimeType contains '${mimeTypeMap[file_type]}'`);
+          } else {
+            queryParts.push(`mimeType = '${mimeTypeMap[file_type]}'`);
+          }
+        } else {
+          // Assume it's a specific MIME type
+          queryParts.push(`mimeType = '${file_type}'`);
+        }
+      }
+
+      // Date filters
+      if (modified_after) {
+        queryParts.push(`modifiedTime > '${modified_after}T00:00:00'`);
+      }
+      if (modified_before) {
+        queryParts.push(`modifiedTime < '${modified_before}T23:59:59'`);
+      }
+
+      // Owner filter
+      if (owner) {
+        queryParts.push(`'${owner}' in owners`);
+      }
+
+      // Folder filter
+      if (folder_id) {
+        queryParts.push(`'${folder_id}' in parents`);
+      }
+
+      // Trash filter
+      if (!include_trashed) {
+        queryParts.push('trashed=false');
+      }
+
+      const searchQuery = queryParts.length > 0 ? queryParts.join(' and ') : undefined;
+      const pageSize = Math.min(max_results, 100);
+
+      const res = await drive.files.list({
+        q: searchQuery,
+        pageSize,
+        fields: "files(id, name, mimeType, modifiedTime, size, owners, parents, webViewLink)",
+        orderBy: "modifiedTime desc",
+      });
+
+      const files = res.data.files || [];
+      
+      let output = `Advanced search results (${files.length} files found):\n\n`;
+      output += `Query: ${searchQuery || 'No filters applied'}\n\n`;
+
+      if (files.length === 0) {
+        output += "No files found matching the criteria.";
+      } else {
+        files.forEach((file, index) => {
+          const owners = file.owners?.map(o => o.emailAddress).join(', ') || 'Unknown';
+          output += `${index + 1}. ${file.name}\n`;
+          output += `   ID: ${file.id}\n`;
+          output += `   Type: ${file.mimeType}\n`;
+          output += `   Size: ${file.size || 'N/A'}\n`;
+          output += `   Modified: ${file.modifiedTime}\n`;
+          output += `   Owner: ${owners}\n`;
+          if (file.webViewLink) {
+            output += `   View: ${file.webViewLink}\n`;
+          }
+          output += '\n';
+        });
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: output,
+          },
+        ],
+        isError: false,
+      };
+    } catch (error: any) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error in advanced search: ${error.message}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  } else if (request.params.name === "gdrive_get_folder_tree") {
+    const { root_folder_id, max_depth = 3, include_files = false } = request.params.arguments as any;
+    
+    if (!root_folder_id) {
+      throw new McpError(ErrorCode.InvalidParams, "Root folder ID is required");
+    }
+
+    try {
+      const maxDepth = Math.min(max_depth, 10); // Safety limit
+      const tree = await buildFolderTree(root_folder_id, 0, maxDepth, include_files);
+      
+      const output = `Folder tree starting from ${root_folder_id}:\n\n${formatFolderTree(tree, 0)}`;
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: output,
+          },
+        ],
+        isError: false,
+      };
+    } catch (error: any) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error building folder tree: ${error.message}`,
+          },
+        ],
+        isError: true,
+      };
+    }
   }
   throw new Error("Tool not found");
 });
+
+// Helper function to build folder tree recursively
+async function buildFolderTree(folderId: string, currentDepth: number, maxDepth: number, includeFiles: boolean): Promise<any> {
+  if (currentDepth >= maxDepth) {
+    return { name: '...', type: 'depth_limit', id: null, children: [] };
+  }
+
+  try {
+    // Get folder info
+    const folderInfo = folderId === 'root' 
+      ? { data: { name: 'My Drive', id: 'root', mimeType: 'application/vnd.google-apps.folder' } }
+      : await drive.files.get({ fileId: folderId, fields: 'id, name, mimeType' });
+
+    // Get folder contents
+    const query = includeFiles 
+      ? `'${folderId}' in parents and trashed=false`
+      : `'${folderId}' in parents and trashed=false and mimeType='application/vnd.google-apps.folder'`;
+
+    const res = await drive.files.list({
+      q: query,
+      pageSize: 100,
+      fields: "files(id, name, mimeType, size)",
+      orderBy: "folder,name",
+    });
+
+    const items = res.data.files || [];
+    const children = [];
+
+    // Process folders first
+    const folders = items.filter(item => item.mimeType === 'application/vnd.google-apps.folder');
+    for (const folder of folders) {
+      const subtree = await buildFolderTree(folder.id!, currentDepth + 1, maxDepth, includeFiles);
+      children.push({
+        name: folder.name,
+        type: 'folder',
+        id: folder.id,
+        children: subtree.children || [subtree]
+      });
+    }
+
+    // Add files if requested
+    if (includeFiles) {
+      const files = items.filter(item => item.mimeType !== 'application/vnd.google-apps.folder');
+      files.forEach(file => {
+        children.push({
+          name: file.name,
+          type: 'file',
+          id: file.id,
+          mimeType: file.mimeType,
+          size: file.size,
+          children: []
+        });
+      });
+    }
+
+    return {
+      name: folderInfo.data.name,
+      type: 'folder',
+      id: folderInfo.data.id,
+      children
+    };
+  } catch (error: any) {
+    return {
+      name: `Error: ${error.message}`,
+      type: 'error',
+      id: folderId,
+      children: []
+    };
+  }
+}
+
+// Helper function to format folder tree for display
+function formatFolderTree(node: any, depth: number): string {
+  const indent = '  '.repeat(depth);
+  let result = '';
+
+  if (node.type === 'folder') {
+    result += `${indent}📁 ${node.name} (${node.id})\n`;
+    if (node.children && node.children.length > 0) {
+      for (const child of node.children) {
+        result += formatFolderTree(child, depth + 1);
+      }
+    } else if (depth < 2) {
+      result += `${indent}  (empty)\n`;
+    }
+  } else if (node.type === 'file') {
+    const size = node.size ? ` [${node.size} bytes]` : '';
+    result += `${indent}📄 ${node.name} (${node.id})${size}\n`;
+  } else if (node.type === 'depth_limit') {
+    result += `${indent}⋯ (max depth reached)\n`;
+  } else if (node.type === 'error') {
+    result += `${indent}❌ ${node.name}\n`;
+  }
+
+  return result;
+}
 
 const credentialsPath = process.env.MCP_GDRIVE_CREDENTIALS || path.join(process.cwd(), "credentials", ".gdrive-server-credentials.json");
 
