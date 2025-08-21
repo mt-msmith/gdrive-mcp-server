@@ -1,45 +1,167 @@
 # Google Drive MCP Server
 
-A powerful Model Context Protocol (MCP) server that provides seamless integration with Google Drive, allowing AI models to search, list, and read files from Google Drive.
+A comprehensive Model Context Protocol (MCP) server that provides complete Google Drive integration, enabling AI models to search, read, create, modify, and organize files in Google Drive with rich formatting support.
 
 ## 🚀 Features
 
+### Core Capabilities
+- ✅ **Full CRUD Operations**: Create, read, update, and delete files and folders
+- ✅ **Rich Text Formatting**: Native Google Docs with markdown and HTML support
+- ✅ **Google Workspace Integration**: Native support for Docs, Sheets, and other formats
+- ✅ **Smart Format Detection**: Auto-detects content format (markdown, HTML, plain text)
+- ✅ **Advanced Search**: Powerful full-text search across your entire Drive
+- ✅ **Authentication Management**: Built-in OAuth refresh and permission management
+
 ### Tools
 
-#### 1. `gdrive_search`
+#### 📁 **File Management**
+
+##### `gdrive_search`
 Search for files in your Google Drive with powerful full-text search capabilities.
-- **Input**: 
-  ```json
-  {
-    "query": "string (your search query)"
-  }
-  ```
-- **Output**: List of files with:
-  - File name
-  - MIME type
-  - File ID
-  - Last modified time
-  - File size
+```json
+{
+  "query": "string (your search query)"
+}
+```
 
-#### 2. `gdrive_read_file`
-Read file contents directly using a Google Drive file ID.
-- **Input**:
-  ```json
-  {
-    "file_id": "string (Google Drive file ID)"
-  }
-  ```
-- **Output**: File contents with appropriate format conversion
+##### `gdrive_read_file`
+Read file contents with intelligent format conversion.
+```json
+{
+  "file_id": "string (Google Drive file ID)"
+}
+```
 
-### Automatic File Format Handling
+##### `gdrive_create_file`
+Create new files with optional format conversion to Google Workspace formats.
+```json
+{
+  "name": "string (file name)",
+  "content": "string (file content)", 
+  "mimeType": "string (optional, defaults to text/plain)",
+  "parentFolderId": "string (optional folder ID)"
+}
+```
 
-The server intelligently handles different Google Workspace file types:
+##### `gdrive_update_file`
+Update existing regular files (non-Google Workspace documents).
+```json
+{
+  "file_id": "string (file ID)",
+  "content": "string (new content)",
+  "mimeType": "string (optional)"
+}
+```
+
+##### `gdrive_rename_file`
+Rename any file or folder.
+```json
+{
+  "file_id": "string (file ID)",
+  "new_name": "string (new name)"
+}
+```
+
+#### 📝 **Google Docs Management**
+
+##### `gdrive_create_document`
+Create rich Google Docs with full formatting support.
+```json
+{
+  "name": "string (document name)",
+  "content": "string (markdown/HTML/plain text content)",
+  "parentFolderId": "string (optional folder ID)",
+  "format_type": "string (optional: markdown, html, plain)"
+}
+```
+
+##### `gdrive_update_document`  
+Update existing Google Docs with rich formatting preservation.
+```json
+{
+  "file_id": "string (document ID)",
+  "content": "string (markdown/HTML/plain text content)",
+  "format_type": "string (optional: markdown, html, plain)"
+}
+```
+
+#### 📂 **Folder Management**
+
+##### `gdrive_create_folder`
+Create new folders and organize your Drive.
+```json
+{
+  "name": "string (folder name)",
+  "parentFolderId": "string (optional parent folder ID)"
+}
+```
+
+#### 🔐 **Authentication**
+
+##### `gdrive_refresh_auth`
+Refresh authentication credentials and update permissions from within your AI tool.
+```json
+{}
+```
+
+## 🎨 Rich Formatting Support
+
+### Markdown Features
+The server supports comprehensive markdown formatting in Google Docs:
+
+```markdown
+# Headers (H1-H6)
+## Subheadings  
+### And more...
+
+**Bold text**
+*Italic text*
+~~Strikethrough text~~
+`Inline code with highlighting`
+
+[Clickable links](https://example.com)
+
+> Blockquotes with styling
+
+- Bullet lists
+- With multiple items
+
+1. Numbered lists
+2. Auto-formatted
+
+---
+Horizontal dividers
+```
+
+### HTML Support
+Full HTML tag conversion to Google Docs formatting:
+- `<h1>` to `<h6>` → Native Google Docs headers
+- `<strong>`, `<b>` → Bold formatting  
+- `<em>`, `<i>` → Italic formatting
+- `<code>` → Code highlighting
+- `<a href="">` → Hyperlinks
+- `<ul>`, `<ol>`, `<li>` → Formatted lists
+- `<blockquote>` → Styled quotes
+
+### Auto-Format Detection
+- **Markdown**: Detected by presence of `**`, `#`, `*`, `` ` ``
+- **HTML**: Detected by presence of `<` and `>` tags  
+- **Plain Text**: Fallback for simple content
+- **Manual Override**: Use `format_type` parameter to force specific parsing
+
+### File Format Handling
+**Reading Files:**
 - 📝 Google Docs → Markdown
-- 📊 Google Sheets → CSV
+- 📊 Google Sheets → CSV  
 - 📊 Google Presentations → Plain text
 - 🎨 Google Drawings → PNG
 - 📄 Text/JSON files → UTF-8 text
 - 📦 Other files → Base64 encoded
+
+**Creating Files:**
+- Text content → Regular files or Google Workspace conversion
+- Markdown/HTML → Rich Google Docs with native formatting
+- CSV data → Google Sheets (when using appropriate MIME type)
 
 ## 🛠️ Getting Started
 
@@ -58,12 +180,12 @@ The server intelligently handles different Google Workspace file types:
    - Click "Create"
    - Wait for the project to be created and select it
 
-2. **Enable the Google Drive API**
+2. **Enable Required APIs**
    - Go to the [API Library](https://console.cloud.google.com/apis/library)
-   - Search for "Google Drive API"
-   - Click on "Google Drive API"
-   - Click "Enable"
-   - Wait for the API to be enabled
+   - Search for and enable the following APIs:
+     - **Google Drive API** (for file operations)
+     - **Google Docs API** (for rich document formatting)
+   - Click "Enable" for each API and wait for activation
 
 3. **Configure OAuth Consent Screen**
    - Navigate to [OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent)
@@ -77,8 +199,10 @@ The server intelligently handles different Google Workspace file types:
      - Developer contact email: your email
    - Click "Save and Continue"
    - On the "Scopes" page:
-     - Click "Add or Remove Scopes"
-     - Add `https://www.googleapis.com/auth/drive.readonly`
+     - Click "Add or Remove Scopes"  
+     - Add the following scopes:
+       - `https://www.googleapis.com/auth/drive` (for full Drive access)
+       - `https://www.googleapis.com/auth/documents` (for Google Docs formatting)
      - Click "Update"
    - Click "Save and Continue"
    - Review the summary and click "Back to Dashboard"
@@ -164,26 +288,80 @@ Add this configuration to your app's server settings:
 
 Replace `path/to/gdrive-mcp-server` with the actual path to your installation directory.
 
-### Example Usage
+## 💡 Example Usage
 
-1. **Search for files**:
-   ```typescript
-   // Search for documents containing "quarterly report"
-   const result = await gdrive_search({ query: "quarterly report" });
-   ```
+### Basic Operations
+```typescript
+// Search for files
+const files = await gdrive_search({ query: "quarterly report" });
 
-2. **Read file contents**:
-   ```typescript
-   // Read a specific file using its ID
-   const contents = await gdrive_read_file({ file_id: "your-file-id" });
-   ```
+// Read any file
+const content = await gdrive_read_file({ file_id: "your-file-id" });
+
+// Create a simple text file
+await gdrive_create_file({ 
+  name: "meeting-notes.txt", 
+  content: "Meeting notes from today..." 
+});
+```
+
+### Rich Document Creation
+```typescript
+// Create a formatted Google Doc
+await gdrive_create_document({
+  name: "Project Proposal",
+  content: `
+# Project Proposal
+
+## Overview
+This document outlines our **exciting new project** with the following goals:
+
+- Improve user engagement by *50%*
+- Reduce costs through [automation](https://example.com)
+- \`Implement\` modern architecture
+
+> "Innovation distinguishes between a leader and a follower." - Steve Jobs
+
+### Timeline
+1. Planning phase (2 weeks)
+2. Development phase (8 weeks) 
+3. Testing phase (2 weeks)
+
+---
+
+**Next Steps:** Schedule team meeting to discuss details.
+  `,
+  parentFolderId: "your-folder-id"
+});
+```
+
+### Content Updates
+```typescript
+// Update a Google Doc with new formatted content
+await gdrive_update_document({
+  file_id: "doc-id-here",
+  content: "# Updated Title\n\nNew **bold** content with *formatting*!"
+});
+
+// Organize files
+await gdrive_create_folder({ name: "2024 Projects" });
+await gdrive_rename_file({ file_id: "old-file-id", new_name: "New Name.docx" });
+```
+
+### Authentication Management
+```typescript  
+// Refresh permissions from within your AI tool
+await gdrive_refresh_auth({});
+```
 
 ## 🔒 Security
 
-- All sensitive credentials are stored in the `credentials` directory
+- All sensitive credentials are stored in the `credentials` directory  
 - OAuth credentials and tokens are excluded from version control
-- Read-only access to Google Drive
-- Secure OAuth 2.0 authentication flow
+- **Full Google Drive access** with create, read, update, delete permissions
+- **Google Docs API access** for rich text formatting capabilities
+- Secure OAuth 2.0 authentication flow with refresh token support
+- Built-in authentication refresh tool for easy permission updates
 
 ## 🤝 Contributing
 
@@ -195,14 +373,51 @@ This MCP server is licensed under the MIT License. See the [LICENSE](LICENSE) fi
 
 ## 🔍 Troubleshooting
 
-If you encounter issues:
-1. Verify your Google Cloud Project setup
-2. Ensure all required OAuth scopes are enabled
-3. Check that credentials are properly placed in the `credentials` directory
-4. Verify file permissions and access rights in Google Drive
+### Common Issues
+
+#### Permission Errors
+If you get "Insufficient Permission" errors:
+1. **Re-authenticate with new scopes**: Run `gdrive_refresh_auth()` or `node dist/index.js auth`
+2. **Check OAuth scopes**: Ensure you've added both Drive and Docs API scopes in Google Cloud Console
+3. **Verify API enablement**: Confirm both Google Drive API and Google Docs API are enabled
+
+#### Authentication Issues  
+1. Verify your Google Cloud Project setup matches the instructions
+2. Check that `credentials/gcp-oauth.keys.json` exists and is valid
+3. Ensure credentials are properly placed in the `credentials` directory
+4. Try deleting `credentials/.gdrive-server-credentials.json` and re-authenticating
+
+#### Formatting Issues
+1. **Google Docs not formatting**: Make sure you're using `gdrive_update_document` (not `gdrive_update_file`) for Google Docs
+2. **Index errors**: These are usually resolved in the latest version - ensure you're using current code
+3. **Content not appearing**: Check that the document ID is correct and you have edit permissions
+
+#### General Issues
+1. **Build errors**: Run `npm run build` after any code changes
+2. **API errors**: Check the Google Cloud Console for API quotas and limits
+3. **File not found**: Verify file IDs are correct and files exist in your accessible Drive folders
 
 ## 📚 Additional Resources
 
 - [Google Drive API Documentation](https://developers.google.com/drive/api/v3/reference)
+- [Google Docs API Documentation](https://developers.google.com/docs/api/reference/rest)
 - [OAuth 2.0 for Desktop Apps](https://developers.google.com/identity/protocols/oauth2/native-app)
 - [Model Context Protocol Documentation](https://modelcontextprotocol.io)
+- [Markdown Syntax Guide](https://www.markdownguide.org/basic-syntax/)
+
+## 🚀 What's New
+
+### v2.0 Features
+- ✅ **Full CRUD Operations**: Complete create, read, update, delete functionality
+- ✅ **Rich Google Docs Support**: Native formatting with markdown and HTML
+- ✅ **Advanced Formatting**: Headers, bold, italic, links, lists, code, blockquotes
+- ✅ **Smart Format Detection**: Auto-detects markdown, HTML, or plain text
+- ✅ **Folder Management**: Create and organize folders
+- ✅ **Built-in Auth Refresh**: Update permissions without leaving your AI tool
+- ✅ **Enhanced Error Handling**: Better error messages and troubleshooting
+
+### Upgrade from v1.0
+If you're upgrading from the read-only version:
+1. Update OAuth scopes in Google Cloud Console (add full Drive + Docs API access)
+2. Re-authenticate: `node dist/index.js auth` or use `gdrive_refresh_auth()`
+3. Enjoy full read-write capabilities with rich formatting!
