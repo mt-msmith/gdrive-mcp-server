@@ -305,7 +305,7 @@ const server = new Server(
 );
 
 server.setRequestHandler(ListResourcesRequestSchema, async (request) => {
-  const pageSize = 10;
+  const pageSize = 100;
   const params: any = {
     pageSize,
     fields: "nextPageToken, files(id, name, mimeType)",
@@ -678,7 +678,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             max_results: {
               type: "number",
-              description: "Maximum number of results to return (defaults to 50, max 100)",
+              description: "Maximum number of results to return (defaults to 100, max 1000)",
+            },
+            search_scope: {
+              type: "string",
+              enum: ["name", "content", "both"],
+              description: "Where to search for the query text: 'name' (file names only), 'content' (file content only), or 'both' (default)",
             },
           },
         },
@@ -726,7 +731,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     
     const res = await drive.files.list({
       q: formattedQuery,
-      pageSize: 10,
+      pageSize: 100,
       fields: "files(id, name, mimeType, modifiedTime, size)",
     });
     
@@ -1399,17 +1404,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       owner, 
       folder_id, 
       include_trashed = false,
-      max_results = 50 
+      max_results = 100,
+      search_scope = "both"
     } = request.params.arguments as any;
 
     try {
       // Build the search query
       const queryParts: string[] = [];
 
-      // Text search
+      // Text search with scope control
       if (query) {
         const escapedQuery = query.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
-        queryParts.push(`fullText contains '${escapedQuery}' or name contains '${escapedQuery}'`);
+        if (search_scope === "name") {
+          queryParts.push(`name contains '${escapedQuery}'`);
+        } else if (search_scope === "content") {
+          queryParts.push(`fullText contains '${escapedQuery}'`);
+        } else { // "both" or default
+          queryParts.push(`fullText contains '${escapedQuery}' or name contains '${escapedQuery}'`);
+        }
       }
 
       // File type filter
@@ -1460,7 +1472,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       const searchQuery = queryParts.length > 0 ? queryParts.join(' and ') : undefined;
-      const pageSize = Math.min(max_results, 100);
+      const pageSize = Math.min(max_results, 1000);
 
       const res = await drive.files.list({
         q: searchQuery,
@@ -1472,7 +1484,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const files = res.data.files || [];
       
       let output = `Advanced search results (${files.length} files found):\n\n`;
-      output += `Query: ${searchQuery || 'No filters applied'}\n\n`;
+      output += `Query: ${searchQuery || 'No filters applied'}\n`;
+      if (query) {
+        output += `Search scope: ${search_scope} (searching in ${search_scope === 'name' ? 'file names only' : search_scope === 'content' ? 'file content only' : 'both names and content'})\n`;
+      }
+      output += '\n';
 
       if (files.length === 0) {
         output += "No files found matching the criteria.";
