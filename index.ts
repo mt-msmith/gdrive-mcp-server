@@ -706,11 +706,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
-        name: "gdrive_refresh_auth",
-        description: "Refresh Google Drive authentication to get updated permissions",
+        name: "refresh_auth",
+        description: "Refresh Google Drive authentication when credentials expire",
         inputSchema: {
           type: "object",
           properties: {},
+          required: [],
         },
       },
     ],
@@ -966,27 +967,34 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         isError: true,
       };
     }
-  } else if (request.params.name === "gdrive_refresh_auth") {
+  } else if (request.params.name === "refresh_auth") {
     try {
-      await refreshAuthentication();
+      await authenticateAndSaveCredentials();
+      
+      // Reload credentials
+      const credentials = JSON.parse(fs.readFileSync(credentialsPath, "utf-8"));
+      const auth = new google.auth.OAuth2();
+      auth.setCredentials(credentials);
+      google.options({ auth });
+      
       return {
         content: [
           {
             type: "text",
-            text: "Authentication refreshed successfully! The server now has updated permissions to create, modify, and delete files in Google Drive.",
-          },
+            text: "Authentication refreshed successfully. You can now continue using Google Drive."
+          }
         ],
-        isError: false,
+        isError: false
       };
     } catch (error: any) {
       return {
         content: [
           {
             type: "text",
-            text: `Error refreshing authentication: ${error.message}\nPlease ensure your OAuth credentials are properly configured.`,
-          },
+            text: `Failed to refresh authentication: ${error.message}`
+          }
         ],
-        isError: true,
+        isError: true
       };
     }
   } else if (request.params.name === "gdrive_create_document") {
@@ -1657,26 +1665,6 @@ async function authenticateAndSaveCredentials() {
   console.log("Credentials saved. You can now run the server.");
 }
 
-async function refreshAuthentication() {
-  const keyPath = process.env.GOOGLE_APPLICATION_CREDENTIALS || path.join(process.cwd(), "credentials", "gcp-oauth.keys.json");
-  
-  const auth = await authenticate({
-    keyfilePath: keyPath,
-    scopes: [
-      "https://www.googleapis.com/auth/drive",
-      "https://www.googleapis.com/auth/documents"
-    ],
-  });
-  
-  fs.writeFileSync(credentialsPath, JSON.stringify(auth.credentials));
-  
-  // Update the global auth instance
-  const authClient = new google.auth.OAuth2();
-  authClient.setCredentials(auth.credentials);
-  google.options({ auth: authClient });
-  
-  return true;
-}
 
 async function loadCredentialsAndRunServer() {
   if (!fs.existsSync(credentialsPath)) {
