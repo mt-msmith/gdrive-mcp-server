@@ -17,6 +17,117 @@ import path from "path";
 
 const drive = google.drive("v3");
 const docs = google.docs("v1");
+const slides = google.slides("v1");
+
+// Helper function to generate unique object IDs for slides
+function generateObjectId(): string {
+  return 'id_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now().toString(36);
+}
+
+// Helper function to process markdown text for slides
+function parseMarkdownForSlides(text: string): { text: string; textRuns: any[] } {
+  let cleanText = text;
+  let textRuns: any[] = [];
+  let currentPos = 0;
+
+  // Process bold **text**
+  const boldRegex = /\*\*(.*?)\*\*/g;
+  let match;
+  let offset = 0;
+  
+  while ((match = boldRegex.exec(text)) !== null) {
+    const startIndex = match.index - offset;
+    const endIndex = startIndex + match[1].length;
+    
+    textRuns.push({
+      startIndex,
+      endIndex,
+      textStyle: {
+        bold: true
+      }
+    });
+    
+    cleanText = cleanText.replace(match[0], match[1]);
+    offset += 4; // ** at start and end
+  }
+
+  // Process italic *text*
+  const italicRegex = /(?<!\*)\*(?!\*)([^*]+?)\*(?!\*)/g;
+  offset = 0;
+  text = cleanText;
+  
+  while ((match = italicRegex.exec(text)) !== null) {
+    const adjustedIndex = match.index - Math.floor(offset * match.index / text.length);
+    const startIndex = adjustedIndex;
+    const endIndex = startIndex + match[1].length;
+    
+    textRuns.push({
+      startIndex,
+      endIndex,
+      textStyle: {
+        italic: true
+      }
+    });
+    
+    cleanText = cleanText.replace(match[0], match[1]);
+    offset += 2; // * at start and end
+  }
+
+  // Process underline _text_
+  cleanText = cleanText.replace(/_(.*?)_/g, (fullMatch, content) => {
+    const startIndex = cleanText.indexOf(fullMatch);
+    const endIndex = startIndex + content.length;
+    
+    textRuns.push({
+      startIndex,
+      endIndex,
+      textStyle: {
+        underline: true
+      }
+    });
+    
+    return content;
+  });
+
+  // Process strikethrough ~~text~~
+  cleanText = cleanText.replace(/~~(.*?)~~/g, (fullMatch, content) => {
+    const startIndex = cleanText.indexOf(fullMatch);
+    const endIndex = startIndex + content.length;
+    
+    textRuns.push({
+      startIndex,
+      endIndex,
+      textStyle: {
+        strikethrough: true
+      }
+    });
+    
+    return content;
+  });
+
+  // Sort text runs by start index
+  textRuns.sort((a, b) => a.startIndex - b.startIndex);
+
+  return { text: cleanText, textRuns };
+}
+
+// Helper function to create layout-specific slide requests
+function createSlideWithLayout(slideId: string, layoutType: string = 'BLANK', insertionIndex?: number): any {
+  const slideRequest: any = {
+    createSlide: {
+      objectId: slideId,
+      slideLayoutReference: {
+        predefinedLayout: layoutType
+      }
+    }
+  };
+
+  if (insertionIndex !== undefined) {
+    slideRequest.createSlide.insertionIndex = insertionIndex;
+  }
+
+  return slideRequest;
+}
 
 // Helper function to process markdown content with full formatting support
 async function processMarkdownContent(content: string, requests: any[], startIndex: number, documentId: string) {
@@ -717,6 +828,256 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: "object",
           properties: {},
           required: [],
+        },
+      },
+      {
+        name: "gdrive_create_presentation",
+        description: "Create a new Google Slides presentation",
+        inputSchema: {
+          type: "object",
+          properties: {
+            name: {
+              type: "string",
+              description: "The name of the presentation to create",
+            },
+            parentFolderId: {
+              type: "string",
+              description: "ID of the parent folder (optional, defaults to root)",
+            },
+          },
+          required: ["name"],
+        },
+      },
+      {
+        name: "gdrive_add_slide",
+        description: "Add a new slide to an existing presentation",
+        inputSchema: {
+          type: "object",
+          properties: {
+            presentation_id: {
+              type: "string",
+              description: "The ID of the presentation",
+            },
+            layout: {
+              type: "string",
+              description: "Layout type: BLANK, TITLE_AND_BODY, TITLE_ONLY, SECTION_HEADER, TITLE_AND_TWO_COLUMNS, BLANK (default)",
+            },
+            insertion_index: {
+              type: "number",
+              description: "Index where to insert the slide (optional, defaults to end)",
+            },
+          },
+          required: ["presentation_id"],
+        },
+      },
+      {
+        name: "gdrive_add_text_to_slide",
+        description: "Add formatted text to a slide with rich styling support",
+        inputSchema: {
+          type: "object",
+          properties: {
+            presentation_id: {
+              type: "string",
+              description: "The ID of the presentation",
+            },
+            slide_id: {
+              type: "string",
+              description: "The ID of the slide to add text to",
+            },
+            text: {
+              type: "string",
+              description: "Text content with markdown-like formatting support (##headers, **bold**, *italic*, etc.)",
+            },
+            x: {
+              type: "number",
+              description: "X position in points (optional, defaults to 50)",
+            },
+            y: {
+              type: "number",
+              description: "Y position in points (optional, defaults to 50)",
+            },
+            width: {
+              type: "number",
+              description: "Width in points (optional, defaults to 400)",
+            },
+            height: {
+              type: "number",
+              description: "Height in points (optional, defaults to 100)",
+            },
+          },
+          required: ["presentation_id", "slide_id", "text"],
+        },
+      },
+      {
+        name: "gdrive_add_shape_to_slide",
+        description: "Add a shape to a slide with optional text content",
+        inputSchema: {
+          type: "object",
+          properties: {
+            presentation_id: {
+              type: "string",
+              description: "The ID of the presentation",
+            },
+            slide_id: {
+              type: "string",
+              description: "The ID of the slide",
+            },
+            shape_type: {
+              type: "string",
+              description: "Shape type: TEXT_BOX, RECTANGLE, ROUND_RECTANGLE, ELLIPSE, ARC, BENT_ARROW, BENT_UP_ARROW, BEVEL, BLOCK_ARC, BRACE_PAIR, BRACKET_PAIR, CAN, CHEVRON, CHORD, CLOUD, CORNER, CUBE, CURVED_DOWN_ARROW, CURVED_LEFT_ARROW, CURVED_RIGHT_ARROW, CURVED_UP_ARROW, DECAGON, DIAGONAL_STRIPE, DIAMOND, DODECAGON, DONUT, DOUBLE_WAVE, DOWN_ARROW, DOWN_ARROW_CALLOUT, FOLDED_CORNER, FRAME, HALF_FRAME, HEART, HEPTAGON, HEXAGON, HOME_PLATE, HORIZONTAL_SCROLL, IRREGULAR_SEAL_1, IRREGULAR_SEAL_2, LEFT_ARROW, LEFT_ARROW_CALLOUT, LEFT_BRACE, LEFT_BRACKET, LEFT_RIGHT_ARROW, LEFT_RIGHT_ARROW_CALLOUT, LEFT_RIGHT_UP_ARROW, LEFT_UP_ARROW, LIGHTNING_BOLT, MATH_DIVIDE, MATH_EQUAL, MATH_MINUS, MATH_MULTIPLY, MATH_NOT_EQUAL, MATH_PLUS, MOON, NO_SMOKING, NOTCHED_RIGHT_ARROW, OCTAGON, PARALLELOGRAM, PENTAGON, PIE, PLAQUE, PLUS, QUAD_ARROW, QUAD_ARROW_CALLOUT, RIBBON, RIBBON_2, RIGHT_ARROW, RIGHT_ARROW_CALLOUT, RIGHT_BRACE, RIGHT_BRACKET, RIGHT_TRIANGLE, ROUND_1_RECTANGLE, ROUND_2_DIAGONAL_RECTANGLE, ROUND_2_SAME_RECTANGLE, SMILEY_FACE, SNIP_1_RECTANGLE, SNIP_2_DIAGONAL_RECTANGLE, SNIP_2_SAME_RECTANGLE, SNIP_ROUND_RECTANGLE, STAR_10, STAR_12, STAR_16, STAR_24, STAR_32, STAR_4, STAR_5, STAR_6, STAR_7, STAR_8, STRAIGHT_CONNECTOR_1, STRIPED_RIGHT_ARROW, SUN, TRAPEZOID, TRIANGLE, UP_ARROW, UP_ARROW_CALLOUT, UP_DOWN_ARROW, UTURN_ARROW, VERTICAL_SCROLL, WAVE, WEDGE_ELLIPSE_CALLOUT, WEDGE_RECTANGLE_CALLOUT, WEDGE_ROUND_RECTANGLE_CALLOUT (defaults to RECTANGLE)",
+            },
+            x: {
+              type: "number",
+              description: "X position in points (optional, defaults to 100)",
+            },
+            y: {
+              type: "number",
+              description: "Y position in points (optional, defaults to 100)",
+            },
+            width: {
+              type: "number",
+              description: "Width in points (optional, defaults to 200)",
+            },
+            height: {
+              type: "number",
+              description: "Height in points (optional, defaults to 100)",
+            },
+            text: {
+              type: "string",
+              description: "Text content for the shape (optional)",
+            },
+            fill_color: {
+              type: "object",
+              description: "Fill color as RGB object {red: 0-1, green: 0-1, blue: 0-1} (optional)",
+            },
+            border_color: {
+              type: "object",
+              description: "Border color as RGB object {red: 0-1, green: 0-1, blue: 0-1} (optional)",
+            },
+            border_width: {
+              type: "number",
+              description: "Border width in points (optional, defaults to 1)",
+            },
+          },
+          required: ["presentation_id", "slide_id"],
+        },
+      },
+      {
+        name: "gdrive_add_image_to_slide",
+        description: "Add an image to a slide from a URL or Drive file",
+        inputSchema: {
+          type: "object",
+          properties: {
+            presentation_id: {
+              type: "string",
+              description: "The ID of the presentation",
+            },
+            slide_id: {
+              type: "string",
+              description: "The ID of the slide",
+            },
+            image_url: {
+              type: "string",
+              description: "URL of the image to insert (must be publicly accessible)",
+            },
+            x: {
+              type: "number",
+              description: "X position in points (optional, defaults to 50)",
+            },
+            y: {
+              type: "number",
+              description: "Y position in points (optional, defaults to 50)",
+            },
+            width: {
+              type: "number",
+              description: "Width in points (optional, auto-sized if not provided)",
+            },
+            height: {
+              type: "number",
+              description: "Height in points (optional, auto-sized if not provided)",
+            },
+          },
+          required: ["presentation_id", "slide_id", "image_url"],
+        },
+      },
+      {
+        name: "gdrive_delete_slide",
+        description: "Delete a slide from a presentation",
+        inputSchema: {
+          type: "object",
+          properties: {
+            presentation_id: {
+              type: "string",
+              description: "The ID of the presentation",
+            },
+            slide_id: {
+              type: "string",
+              description: "The ID of the slide to delete",
+            },
+          },
+          required: ["presentation_id", "slide_id"],
+        },
+      },
+      {
+        name: "gdrive_duplicate_slide",
+        description: "Duplicate an existing slide in a presentation",
+        inputSchema: {
+          type: "object",
+          properties: {
+            presentation_id: {
+              type: "string",
+              description: "The ID of the presentation",
+            },
+            slide_id: {
+              type: "string",
+              description: "The ID of the slide to duplicate",
+            },
+            insertion_index: {
+              type: "number",
+              description: "Index where to insert the duplicated slide (optional, defaults to after original)",
+            },
+          },
+          required: ["presentation_id", "slide_id"],
+        },
+      },
+      {
+        name: "gdrive_get_presentation_info",
+        description: "Get detailed information about a presentation and its slides",
+        inputSchema: {
+          type: "object",
+          properties: {
+            presentation_id: {
+              type: "string",
+              description: "The ID of the presentation",
+            },
+          },
+          required: ["presentation_id"],
+        },
+      },
+      {
+        name: "gdrive_replace_text_in_presentation",
+        description: "Replace all instances of text throughout a presentation",
+        inputSchema: {
+          type: "object",
+          properties: {
+            presentation_id: {
+              type: "string",
+              description: "The ID of the presentation",
+            },
+            find_text: {
+              type: "string",
+              description: "Text to find and replace",
+            },
+            replace_text: {
+              type: "string",
+              description: "Text to replace with",
+            },
+            match_case: {
+              type: "boolean",
+              description: "Whether to match case (optional, defaults to false)",
+            },
+          },
+          required: ["presentation_id", "find_text", "replace_text"],
         },
       },
     ],
@@ -1561,6 +1922,568 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         isError: true,
       };
     }
+  } else if (request.params.name === "gdrive_create_presentation") {
+    const { name, parentFolderId } = request.params.arguments as any;
+    
+    if (!name) {
+      throw new McpError(ErrorCode.InvalidParams, "Presentation name is required");
+    }
+
+    try {
+      // Create empty presentation first
+      const presentationRequest = {
+        title: name
+      };
+
+      const presentation = await slides.presentations.create({
+        requestBody: presentationRequest,
+      });
+
+      const presentationId = presentation.data.presentationId!;
+
+      // If parentFolderId is specified, move the presentation there
+      if (parentFolderId) {
+        await drive.files.update({
+          fileId: presentationId,
+          addParents: parentFolderId,
+          fields: 'id, parents'
+        });
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Google Slides presentation created successfully!\nTitle: ${presentation.data.title}\nID: ${presentationId}\nSlides: ${presentation.data.slides?.length || 0}\nURL: https://docs.google.com/presentation/d/${presentationId}/edit`,
+          },
+        ],
+        isError: false,
+      };
+    } catch (error: any) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error creating presentation: ${error.message}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  } else if (request.params.name === "gdrive_add_slide") {
+    const { presentation_id, layout = 'BLANK', insertion_index } = request.params.arguments as any;
+    
+    if (!presentation_id) {
+      throw new McpError(ErrorCode.InvalidParams, "Presentation ID is required");
+    }
+
+    try {
+      const slideId = generateObjectId();
+      const requests = [createSlideWithLayout(slideId, layout, insertion_index)];
+
+      await slides.presentations.batchUpdate({
+        presentationId: presentation_id,
+        requestBody: { requests }
+      });
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Slide added successfully!\nSlide ID: ${slideId}\nLayout: ${layout}\nPresentation ID: ${presentation_id}`,
+          },
+        ],
+        isError: false,
+      };
+    } catch (error: any) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error adding slide: ${error.message}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  } else if (request.params.name === "gdrive_add_text_to_slide") {
+    const { presentation_id, slide_id, text, x = 50, y = 50, width = 400, height = 100 } = request.params.arguments as any;
+    
+    if (!presentation_id || !slide_id || !text) {
+      throw new McpError(ErrorCode.InvalidParams, "Presentation ID, slide ID, and text are required");
+    }
+
+    try {
+      const textBoxId = generateObjectId();
+      const { text: cleanText, textRuns } = parseMarkdownForSlides(text);
+      
+      const requests: any[] = [
+        {
+          createShape: {
+            objectId: textBoxId,
+            shapeType: 'TEXT_BOX',
+            elementProperties: {
+              pageObjectId: slide_id,
+              size: {
+                width: { magnitude: width, unit: 'PT' },
+                height: { magnitude: height, unit: 'PT' }
+              },
+              transform: {
+                scaleX: 1,
+                scaleY: 1,
+                translateX: x,
+                translateY: y,
+                unit: 'PT'
+              }
+            }
+          }
+        },
+        {
+          insertText: {
+            objectId: textBoxId,
+            text: cleanText
+          }
+        }
+      ];
+
+      // Add text formatting
+      textRuns.forEach(run => {
+        requests.push({
+          updateTextStyle: {
+            objectId: textBoxId,
+            textRange: {
+              startIndex: run.startIndex,
+              endIndex: run.endIndex
+            },
+            style: run.textStyle,
+            fields: Object.keys(run.textStyle).join(',')
+          }
+        });
+      });
+
+      await slides.presentations.batchUpdate({
+        presentationId: presentation_id,
+        requestBody: { requests }
+      });
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Text added to slide successfully!\nText box ID: ${textBoxId}\nSlide ID: ${slide_id}\nFormatting: ${textRuns.length} text runs applied`,
+          },
+        ],
+        isError: false,
+      };
+    } catch (error: any) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error adding text to slide: ${error.message}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  } else if (request.params.name === "gdrive_add_shape_to_slide") {
+    const { 
+      presentation_id, 
+      slide_id, 
+      shape_type = 'RECTANGLE', 
+      x = 100, 
+      y = 100, 
+      width = 200, 
+      height = 100,
+      text,
+      fill_color,
+      border_color,
+      border_width = 1
+    } = request.params.arguments as any;
+    
+    if (!presentation_id || !slide_id) {
+      throw new McpError(ErrorCode.InvalidParams, "Presentation ID and slide ID are required");
+    }
+
+    try {
+      const shapeId = generateObjectId();
+      
+      const requests: any[] = [
+        {
+          createShape: {
+            objectId: shapeId,
+            shapeType: shape_type,
+            elementProperties: {
+              pageObjectId: slide_id,
+              size: {
+                width: { magnitude: width, unit: 'PT' },
+                height: { magnitude: height, unit: 'PT' }
+              },
+              transform: {
+                scaleX: 1,
+                scaleY: 1,
+                translateX: x,
+                translateY: y,
+                unit: 'PT'
+              }
+            }
+          }
+        }
+      ];
+
+      // Add text if provided
+      if (text) {
+        const { text: cleanText, textRuns } = parseMarkdownForSlides(text);
+        
+        requests.push({
+          insertText: {
+            objectId: shapeId,
+            text: cleanText
+          }
+        });
+
+        // Add text formatting
+        textRuns.forEach(run => {
+          requests.push({
+            updateTextStyle: {
+              objectId: shapeId,
+              textRange: {
+                startIndex: run.startIndex,
+                endIndex: run.endIndex
+              },
+              style: run.textStyle,
+              fields: Object.keys(run.textStyle).join(',')
+            }
+          });
+        });
+      }
+
+      // Add shape styling
+      const shapeProperties: any = {};
+      
+      if (fill_color) {
+        shapeProperties.shapeBackgroundFill = {
+          solidFill: {
+            color: {
+              rgbColor: fill_color
+            }
+          }
+        };
+      }
+
+      if (border_color || border_width) {
+        shapeProperties.outline = {
+          outlineFill: border_color ? {
+            solidFill: {
+              color: {
+                rgbColor: border_color
+              }
+            }
+          } : undefined,
+          weight: {
+            magnitude: border_width,
+            unit: 'PT'
+          }
+        };
+      }
+
+      if (Object.keys(shapeProperties).length > 0) {
+        requests.push({
+          updateShapeProperties: {
+            objectId: shapeId,
+            shapeProperties,
+            fields: Object.keys(shapeProperties).join(',')
+          }
+        });
+      }
+
+      await slides.presentations.batchUpdate({
+        presentationId: presentation_id,
+        requestBody: { requests }
+      });
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Shape added to slide successfully!\nShape ID: ${shapeId}\nType: ${shape_type}\nSlide ID: ${slide_id}\nPosition: (${x}, ${y})\nSize: ${width}x${height}`,
+          },
+        ],
+        isError: false,
+      };
+    } catch (error: any) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error adding shape to slide: ${error.message}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  } else if (request.params.name === "gdrive_add_image_to_slide") {
+    const { presentation_id, slide_id, image_url, x = 50, y = 50, width, height } = request.params.arguments as any;
+    
+    if (!presentation_id || !slide_id || !image_url) {
+      throw new McpError(ErrorCode.InvalidParams, "Presentation ID, slide ID, and image URL are required");
+    }
+
+    try {
+      const imageId = generateObjectId();
+      
+      const imageProperties: any = {
+        pageObjectId: slide_id,
+        transform: {
+          scaleX: 1,
+          scaleY: 1,
+          translateX: x,
+          translateY: y,
+          unit: 'PT'
+        }
+      };
+
+      if (width && height) {
+        imageProperties.size = {
+          width: { magnitude: width, unit: 'PT' },
+          height: { magnitude: height, unit: 'PT' }
+        };
+      }
+
+      const requests = [
+        {
+          createImage: {
+            objectId: imageId,
+            url: image_url,
+            elementProperties: imageProperties
+          }
+        }
+      ];
+
+      await slides.presentations.batchUpdate({
+        presentationId: presentation_id,
+        requestBody: { requests }
+      });
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Image added to slide successfully!\nImage ID: ${imageId}\nSlide ID: ${slide_id}\nURL: ${image_url}\nPosition: (${x}, ${y})${width && height ? `\nSize: ${width}x${height}` : '\nSize: Auto'}`,
+          },
+        ],
+        isError: false,
+      };
+    } catch (error: any) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error adding image to slide: ${error.message}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  } else if (request.params.name === "gdrive_delete_slide") {
+    const { presentation_id, slide_id } = request.params.arguments as any;
+    
+    if (!presentation_id || !slide_id) {
+      throw new McpError(ErrorCode.InvalidParams, "Presentation ID and slide ID are required");
+    }
+
+    try {
+      const requests = [
+        {
+          deleteObject: {
+            objectId: slide_id
+          }
+        }
+      ];
+
+      await slides.presentations.batchUpdate({
+        presentationId: presentation_id,
+        requestBody: { requests }
+      });
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Slide deleted successfully!\nSlide ID: ${slide_id}\nPresentation ID: ${presentation_id}`,
+          },
+        ],
+        isError: false,
+      };
+    } catch (error: any) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error deleting slide: ${error.message}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  } else if (request.params.name === "gdrive_duplicate_slide") {
+    const { presentation_id, slide_id, insertion_index } = request.params.arguments as any;
+    
+    if (!presentation_id || !slide_id) {
+      throw new McpError(ErrorCode.InvalidParams, "Presentation ID and slide ID are required");
+    }
+
+    try {
+      const newSlideId = generateObjectId();
+      
+      const duplicateRequest: any = {
+        duplicateObject: {
+          objectId: slide_id,
+          objectIds: {
+            [slide_id]: newSlideId
+          }
+        }
+      };
+
+      if (insertion_index !== undefined) {
+        duplicateRequest.duplicateObject.insertionIndex = insertion_index;
+      }
+
+      const requests = [duplicateRequest];
+
+      await slides.presentations.batchUpdate({
+        presentationId: presentation_id,
+        requestBody: { requests }
+      });
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Slide duplicated successfully!\nOriginal slide ID: ${slide_id}\nNew slide ID: ${newSlideId}\nPresentation ID: ${presentation_id}`,
+          },
+        ],
+        isError: false,
+      };
+    } catch (error: any) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error duplicating slide: ${error.message}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  } else if (request.params.name === "gdrive_get_presentation_info") {
+    const { presentation_id } = request.params.arguments as any;
+    
+    if (!presentation_id) {
+      throw new McpError(ErrorCode.InvalidParams, "Presentation ID is required");
+    }
+
+    try {
+      const presentation = await slides.presentations.get({
+        presentationId: presentation_id
+      });
+
+      const slides_info = presentation.data.slides?.map((slide, index) => {
+        const elements = slide.pageElements?.length || 0;
+        return `  ${index + 1}. Slide ID: ${slide.objectId}\n     Elements: ${elements} (${slide.pageElements?.map(el => el.shape ? 'shape' : el.image ? 'image' : el.line ? 'line' : el.table ? 'table' : el.video ? 'video' : 'other').join(', ') || 'none'})`;
+      }).join('\n') || 'No slides found';
+
+      const layoutInfo = presentation.data.layouts?.map((layout, index) => {
+        return `  ${index + 1}. Layout ID: ${layout.objectId}\n     Type: ${layout.layoutProperties?.displayName || 'Unknown'}`;
+      }).join('\n') || 'No layouts found';
+
+      const masterInfo = presentation.data.masters?.map((master, index) => {
+        return `  ${index + 1}. Master ID: ${master.objectId}`;
+      }).join('\n') || 'No masters found';
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Presentation Information:
+Title: ${presentation.data.title}
+ID: ${presentation_id}
+URL: https://docs.google.com/presentation/d/${presentation_id}/edit
+Locale: ${presentation.data.locale || 'Not specified'}
+Revision ID: ${presentation.data.revisionId || 'Not specified'}
+
+Page Size: ${presentation.data.pageSize?.width?.magnitude}x${presentation.data.pageSize?.height?.magnitude} ${presentation.data.pageSize?.width?.unit || 'PT'}
+
+Slides (${presentation.data.slides?.length || 0}):
+${slides_info}
+
+Layouts (${presentation.data.layouts?.length || 0}):
+${layoutInfo}
+
+Masters (${presentation.data.masters?.length || 0}):
+${masterInfo}`,
+          },
+        ],
+        isError: false,
+      };
+    } catch (error: any) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error getting presentation info: ${error.message}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  } else if (request.params.name === "gdrive_replace_text_in_presentation") {
+    const { presentation_id, find_text, replace_text, match_case = false } = request.params.arguments as any;
+    
+    if (!presentation_id || !find_text || replace_text === undefined) {
+      throw new McpError(ErrorCode.InvalidParams, "Presentation ID, find text, and replace text are required");
+    }
+
+    try {
+      const requests = [
+        {
+          replaceAllText: {
+            containsText: {
+              text: find_text,
+              matchCase: match_case
+            },
+            replaceText: replace_text
+          }
+        }
+      ];
+
+      const response = await slides.presentations.batchUpdate({
+        presentationId: presentation_id,
+        requestBody: { requests }
+      });
+
+      const replaceCount = response.data.replies?.[0]?.replaceAllText?.occurrencesChanged || 0;
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Text replacement completed!\nFind: "${find_text}"\nReplace: "${replace_text}"\nOccurrences changed: ${replaceCount}\nMatch case: ${match_case}\nPresentation ID: ${presentation_id}`,
+          },
+        ],
+        isError: false,
+      };
+    } catch (error: any) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error replacing text: ${error.message}`,
+          },
+        ],
+        isError: true,
+      };
+    }
   }
   throw new Error("Tool not found");
 });
@@ -1673,7 +2596,8 @@ async function authenticateAndSaveCredentials() {
     keyfilePath: keyPath,
     scopes: [
       "https://www.googleapis.com/auth/drive",
-      "https://www.googleapis.com/auth/documents"
+      "https://www.googleapis.com/auth/documents",
+      "https://www.googleapis.com/auth/presentations"
     ],
   });
   

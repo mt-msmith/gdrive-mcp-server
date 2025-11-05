@@ -76,7 +76,7 @@ The server automatically handles different file types:
 ## Best Practices
 1. Always use search first to find the correct file ID
 2. Search results include file types (MIME types) to help identify the right file
-3. Search is limited to 10 results per query, so use specific search terms
+3. Search is limited to 100 results per query, so use specific search terms if you need to narrow results
 4. The server has read-only access to Google Drive
 
 ## Error Handling

@@ -7,13 +7,23 @@ A comprehensive Model Context Protocol (MCP) server that provides complete Googl
 ### Core Capabilities
 - ✅ **Full CRUD Operations**: Create, read, update, delete, move, and copy files and folders
 - ✅ **Rich Text Formatting**: Native Google Docs with markdown and HTML support
-- ✅ **Google Workspace Integration**: Native support for Docs, Sheets, and other formats
+- ✅ **Google Workspace Integration**: Native support for Docs, Sheets, and **Google Slides**
 - ✅ **Smart Format Detection**: Auto-detects content format (markdown, HTML, plain text)
 - ✅ **Advanced Search**: Multi-filter search by type, date, owner, location, and content
 - ✅ **File Organization**: Move, copy, rename files with folder management
 - ✅ **Hierarchical Navigation**: Visual folder tree exploration with configurable depth
 - ✅ **Safe Deletion**: Trash/permanent delete options with recovery capabilities
 - ✅ **Authentication Management**: Built-in OAuth refresh and permission management
+
+### 🎨 Google Slides Capabilities (NEW!)
+- ✅ **Presentation Management**: Create, read, and organize Google Slides presentations
+- ✅ **Slide Operations**: Add, duplicate, delete slides with various layout templates
+- ✅ **Rich Content Insertion**: Text boxes, shapes, images with formatting support
+- ✅ **Advanced Formatting**: Markdown-style text formatting (**bold**, *italic*, ~~strikethrough~~)
+- ✅ **Shape Library**: 60+ built-in shapes including arrows, stars, callouts, and geometric shapes
+- ✅ **Visual Customization**: Colors, borders, positioning, and sizing control
+- ✅ **Batch Operations**: Efficient API usage with multiple operations per request
+- ✅ **Text Replacement**: Global find/replace across entire presentations
 
 ### Tools
 
@@ -161,6 +171,111 @@ Get hierarchical folder structure with visual tree display.
 }
 ```
 
+#### 🎨 **Google Slides Management**
+
+##### `gdrive_create_presentation`
+Create a new Google Slides presentation.
+```json
+{
+  "name": "string (presentation name)",
+  "parentFolderId": "string (optional folder ID)"
+}
+```
+
+##### `gdrive_add_slide`
+Add a new slide to an existing presentation with layout support.
+```json
+{
+  "presentation_id": "string (presentation ID)",
+  "layout": "string (optional: BLANK, TITLE_AND_BODY, TITLE_ONLY, SECTION_HEADER, TITLE_AND_TWO_COLUMNS)",
+  "insertion_index": "number (optional slide position)"
+}
+```
+
+##### `gdrive_add_text_to_slide`
+Add formatted text to a slide with rich styling support.
+```json
+{
+  "presentation_id": "string (presentation ID)",
+  "slide_id": "string (slide ID)",
+  "text": "string (text with markdown formatting: **bold**, *italic*, ~~strikethrough~~)",
+  "x": "number (optional X position in points, defaults to 50)",
+  "y": "number (optional Y position in points, defaults to 50)",
+  "width": "number (optional width in points, defaults to 400)",
+  "height": "number (optional height in points, defaults to 100)"
+}
+```
+
+##### `gdrive_add_shape_to_slide`
+Add a shape to a slide with optional text content and styling.
+```json
+{
+  "presentation_id": "string (presentation ID)",
+  "slide_id": "string (slide ID)",
+  "shape_type": "string (optional: RECTANGLE, ELLIPSE, TRIANGLE, ARROW, STAR, etc.)",
+  "x": "number (optional X position)",
+  "y": "number (optional Y position)",
+  "width": "number (optional width)",
+  "height": "number (optional height)",
+  "text": "string (optional text content)",
+  "fill_color": "object (optional RGB: {red: 0-1, green: 0-1, blue: 0-1})",
+  "border_color": "object (optional RGB border color)",
+  "border_width": "number (optional border width in points)"
+}
+```
+
+##### `gdrive_add_image_to_slide`
+Add an image to a slide from a publicly accessible URL.
+```json
+{
+  "presentation_id": "string (presentation ID)",
+  "slide_id": "string (slide ID)",
+  "image_url": "string (publicly accessible image URL)",
+  "x": "number (optional X position)",
+  "y": "number (optional Y position)", 
+  "width": "number (optional width for manual sizing)",
+  "height": "number (optional height for manual sizing)"
+}
+```
+
+##### `gdrive_delete_slide`
+Delete a slide from a presentation.
+```json
+{
+  "presentation_id": "string (presentation ID)",
+  "slide_id": "string (slide ID to delete)"
+}
+```
+
+##### `gdrive_duplicate_slide`
+Duplicate an existing slide in a presentation.
+```json
+{
+  "presentation_id": "string (presentation ID)",
+  "slide_id": "string (slide ID to duplicate)",
+  "insertion_index": "number (optional position for duplicated slide)"
+}
+```
+
+##### `gdrive_get_presentation_info`
+Get detailed information about a presentation and its slides.
+```json
+{
+  "presentation_id": "string (presentation ID)"
+}
+```
+
+##### `gdrive_replace_text_in_presentation`
+Replace all instances of text throughout a presentation.
+```json
+{
+  "presentation_id": "string (presentation ID)",
+  "find_text": "string (text to find)",
+  "replace_text": "string (replacement text)",
+  "match_case": "boolean (optional case sensitivity, defaults to false)"
+}
+```
+
 #### 🔐 **Authentication**
 
 ##### `gdrive_refresh_auth`
@@ -250,6 +365,7 @@ Full HTML tag conversion to Google Docs formatting:
    - Search for and enable the following APIs:
      - **Google Drive API** (for file operations)
      - **Google Docs API** (for rich document formatting)
+     - **Google Slides API** (for presentation creation and editing)
    - Click "Enable" for each API and wait for activation
 
 3. **Configure OAuth Consent Screen**
@@ -268,6 +384,7 @@ Full HTML tag conversion to Google Docs formatting:
      - Add the following scopes:
        - `https://www.googleapis.com/auth/drive` (for full Drive access)
        - `https://www.googleapis.com/auth/documents` (for Google Docs formatting)
+       - `https://www.googleapis.com/auth/presentations` (for Google Slides editing)
      - Click "Update"
    - Click "Save and Continue"
    - Review the summary and click "Back to Dashboard"
@@ -457,6 +574,108 @@ await gdrive_delete_file({ file_id: "unwanted-file-id" });
 await gdrive_delete_file({ file_id: "file-id", permanent: true });
 ```
 
+### Google Slides Creation & Management
+```typescript
+// Create a new presentation
+await gdrive_create_presentation({
+  name: "Q4 Business Review",
+  parentFolderId: "presentations-folder-id"
+});
+
+// Get detailed presentation information
+const info = await gdrive_get_presentation_info({
+  presentation_id: "your-presentation-id"
+});
+
+// Add slides with different layouts
+await gdrive_add_slide({
+  presentation_id: "your-presentation-id",
+  layout: "TITLE_AND_BODY"
+});
+
+await gdrive_add_slide({
+  presentation_id: "your-presentation-id", 
+  layout: "TITLE_AND_TWO_COLUMNS",
+  insertion_index: 2
+});
+```
+
+### Rich Content & Visual Elements
+```typescript
+// Add formatted text to slides
+await gdrive_add_text_to_slide({
+  presentation_id: "your-presentation-id",
+  slide_id: "slide-id",
+  text: "## Quarterly **Results**\n\nKey achievements:\n- Revenue *increased* 25%\n- ~~Old target~~ exceeded\n- `Performance metrics` improved",
+  x: 50,
+  y: 100,
+  width: 500,
+  height: 200
+});
+
+// Add shapes with custom styling
+await gdrive_add_shape_to_slide({
+  presentation_id: "your-presentation-id",
+  slide_id: "slide-id",
+  shape_type: "ROUNDED_RECTANGLE",
+  text: "**Call to Action**\nContact us today!",
+  x: 200,
+  y: 300,
+  width: 300,
+  height: 150,
+  fill_color: { red: 0.2, green: 0.6, blue: 0.9 },
+  border_color: { red: 0.1, green: 0.3, blue: 0.7 },
+  border_width: 3
+});
+
+// Insert images from URLs
+await gdrive_add_image_to_slide({
+  presentation_id: "your-presentation-id",
+  slide_id: "slide-id", 
+  image_url: "https://example.com/chart.png",
+  x: 400,
+  y: 100,
+  width: 350,
+  height: 250
+});
+
+// Create arrow shapes for diagrams
+await gdrive_add_shape_to_slide({
+  presentation_id: "your-presentation-id",
+  slide_id: "slide-id",
+  shape_type: "RIGHT_ARROW",
+  fill_color: { red: 0.9, green: 0.5, blue: 0.1 },
+  x: 150,
+  y: 200,
+  width: 100,
+  height: 50
+});
+```
+
+### Slide Management Operations
+```typescript
+// Duplicate slides for templates
+await gdrive_duplicate_slide({
+  presentation_id: "your-presentation-id",
+  slide_id: "template-slide-id",
+  insertion_index: 5
+});
+
+// Global text replacement across presentation
+await gdrive_replace_text_in_presentation({
+  presentation_id: "your-presentation-id",
+  find_text: "{{COMPANY_NAME}}",
+  replace_text: "Acme Corporation",
+  match_case: false
+});
+
+// Clean up unwanted slides
+await gdrive_delete_slide({
+  presentation_id: "your-presentation-id", 
+  slide_id: "old-slide-id"
+});
+```
+
 ### Authentication Management
 ```typescript  
 // Refresh permissions from within your AI tool
@@ -469,6 +688,7 @@ await gdrive_refresh_auth({});
 - OAuth credentials and tokens are excluded from version control
 - **Full Google Drive access** with create, read, update, delete permissions
 - **Google Docs API access** for rich text formatting capabilities
+- **Google Slides API access** for presentation creation and comprehensive editing
 - Secure OAuth 2.0 authentication flow with refresh token support
 - Built-in authentication refresh tool for easy permission updates
 
@@ -487,8 +707,8 @@ This MCP server is licensed under the MIT License. See the [LICENSE](LICENSE) fi
 #### Permission Errors
 If you get "Insufficient Permission" errors:
 1. **Re-authenticate with new scopes**: Run `gdrive_refresh_auth()` or `node dist/index.js auth`
-2. **Check OAuth scopes**: Ensure you've added both Drive and Docs API scopes in Google Cloud Console
-3. **Verify API enablement**: Confirm both Google Drive API and Google Docs API are enabled
+2. **Check OAuth scopes**: Ensure you've added Drive, Docs, and Slides API scopes in Google Cloud Console
+3. **Verify API enablement**: Confirm Google Drive API, Google Docs API, and Google Slides API are all enabled
 
 #### Authentication Issues  
 1. Verify your Google Cloud Project setup matches the instructions
@@ -516,7 +736,18 @@ If you get "Insufficient Permission" errors:
 
 ## 🚀 What's New
 
-### v2.1 Features (Latest)
+### v3.0 Features (Latest) - COMPREHENSIVE GOOGLE SLIDES SUPPORT
+- ✅ **Complete Slides API Integration**: Full Google Slides creation, editing, and management
+- ✅ **Rich Content Creation**: Text boxes, shapes, images with advanced formatting
+- ✅ **60+ Shape Types**: Comprehensive shape library including arrows, callouts, stars, and geometric shapes
+- ✅ **Advanced Text Formatting**: Markdown-style formatting with bold, italic, strikethrough, and underline
+- ✅ **Visual Customization**: Colors, borders, positioning, and sizing control for all elements
+- ✅ **Layout Templates**: Support for various slide layouts (title, body, columns, etc.)
+- ✅ **Batch Operations**: Efficient API usage for complex slide operations
+- ✅ **Global Text Replacement**: Find and replace across entire presentations
+- ✅ **Comprehensive Slide Management**: Add, duplicate, delete, and organize slides
+
+### v2.1 Features
 - ✅ **Advanced File Organization**: Move, copy, rename, and delete files with safety options
 - ✅ **Folder Navigation**: List folder contents and hierarchical tree visualization  
 - ✅ **Multi-Filter Search**: Advanced search by type, date, owner, location, and content
@@ -533,15 +764,17 @@ If you get "Insufficient Permission" errors:
 - ✅ **Built-in Auth Refresh**: Update permissions without leaving your AI tool
 - ✅ **Enhanced Error Handling**: Better error messages and troubleshooting
 
-### Complete Tool Set (15 Tools)
+### Complete Tool Set (25 Tools)
 **File Management:** search, read, create, update, rename, move, copy, delete, list contents
 **Google Docs:** create documents, update documents with rich formatting  
+**Google Slides:** create presentations, add/duplicate/delete slides, add text/shapes/images, get info, replace text
 **Folders:** create folders, get folder tree structure
 **Search:** basic search, advanced multi-filter search
 **Admin:** refresh authentication
 
 ### Upgrade from Earlier Versions
-If you're upgrading from v1.0 or v2.0:
-1. Update OAuth scopes in Google Cloud Console (add full Drive + Docs API access)
-2. Re-authenticate: `node dist/index.js auth` or use `gdrive_refresh_auth()`
-3. Enjoy comprehensive file management with advanced search and organization!
+If you're upgrading from v1.0, v2.0, or v2.1:
+1. **Enable Google Slides API** in Google Cloud Console
+2. **Update OAuth scopes** to include `https://www.googleapis.com/auth/presentations`
+3. **Re-authenticate**: `node dist/index.js auth` or use `gdrive_refresh_auth()`
+4. **Enjoy complete Google Workspace integration** with Docs, Drive, and now comprehensive Slides support!
